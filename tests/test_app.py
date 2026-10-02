@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.config import Config, Destination, load_config
-from src.main import JsonFormatter, create_app
+from src.main import create_app
 
 TOKEN = "test-bot-token"
 KEY = "test-api-key"
@@ -31,10 +31,11 @@ def client_for(
     return TestClient(create_app(config, httpx.MockTransport(handler)))
 
 
-def test_health_does_not_contact_telegram(config: Config) -> None:
-    def forbidden(_request: httpx.Request) -> httpx.Response:
-        pytest.fail("Health contacted Telegram")
+def forbidden(_request: httpx.Request) -> httpx.Response:
+    pytest.fail("Request contacted Telegram")
 
+
+def test_health_does_not_contact_telegram(config: Config) -> None:
     with client_for(config, forbidden) as client:
         response = client.get("/health")
     assert response.status_code == 200
@@ -51,7 +52,7 @@ def test_success_and_html_escaping(config: Config) -> None:
     payload = {
         "destination": "website-a",
         "title": "<New & request>",
-        "text": "Alice <script> & \"Bob\"",
+        "text": 'Alice <script> & "Bob"',
     }
     with client_for(config, handler) as client:
         response = client.post("/v1/notify", headers=AUTH, json=payload)
@@ -84,9 +85,6 @@ def test_auth_failure_never_sends(config: Config, headers: dict[str, str]) -> No
 
 
 def test_unknown_destination_never_sends(config: Config) -> None:
-    def forbidden(_request: httpx.Request) -> httpx.Response:
-        pytest.fail("Unknown destination contacted Telegram")
-
     with client_for(config, forbidden) as client:
         response = client.post(
             "/v1/notify", headers=AUTH, json={**PAYLOAD, "destination": "missing"}
@@ -107,12 +105,7 @@ def test_unknown_destination_never_sends(config: Config) -> None:
         ("parse_mode", "HTML"),
     ],
 )
-def test_invalid_payload_never_sends(
-    config: Config, field: str, value: str
-) -> None:
-    def forbidden(_request: httpx.Request) -> httpx.Response:
-        pytest.fail("Invalid payload contacted Telegram")
-
+def test_invalid_payload_never_sends(config: Config, field: str, value: str) -> None:
     payload = {**PAYLOAD, field: value}
     with client_for(config, forbidden) as client:
         response = client.post("/v1/notify", headers=AUTH, json=payload)
@@ -150,7 +143,7 @@ def test_transient_failure_retries_once(
             response = client.post("/v1/notify", headers=AUTH, json=PAYLOAD)
         finally:
             logger.removeHandler(caplog.handler)
-    logs = "\n".join(JsonFormatter().format(record) for record in caplog.records)
+    logs = "\n".join(record.getMessage() for record in caplog.records)
 
     assert response.status_code == 200
     assert calls == 2
@@ -174,9 +167,7 @@ def test_telegram_4xx_is_not_retried(config: Config) -> None:
 
 
 @pytest.mark.parametrize("status", [503, 200])
-def test_telegram_failure_after_retry_or_false_ok(
-    config: Config, status: int
-) -> None:
+def test_telegram_failure_after_retry_or_false_ok(config: Config, status: int) -> None:
     calls = 0
 
     def handler(_request: httpx.Request) -> httpx.Response:
@@ -205,7 +196,7 @@ def test_failure_logs_have_no_secrets(
             response = client.post("/v1/notify", headers=AUTH, json=PAYLOAD)
         finally:
             logger.removeHandler(caplog.handler)
-    logs = "\n".join(JsonFormatter().format(record) for record in caplog.records)
+    logs = "\n".join(record.getMessage() for record in caplog.records)
 
     assert response.status_code == 502
     entry = json.loads(logs.strip())

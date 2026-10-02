@@ -29,18 +29,12 @@ class NotifyRequest(BaseModel):
     ]
 
 
-class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        return json.dumps(record.msg, ensure_ascii=False)
-
-
 def configure_logging() -> logging.Logger:
     logger = logging.getLogger("skerter_notify")
     for old_handler in logger.handlers[:]:
         logger.removeHandler(old_handler)
         old_handler.close()
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -98,26 +92,29 @@ def create_app(
             await send_message(app.state.telegram_client, destination, message)
         except DeliveryError as exc:
             app.state.logger.error(
-                {
-                    "event": "notification_failed",
-                    **fields,
-                    "error": exc.code,
-                    "exception_type": exc.exception_type,
-                    "duration_ms": round((time.perf_counter() - started) * 1000),
-                    "result": "error",
-                }
+                json.dumps(
+                    {
+                        "event": "notification_failed",
+                        **fields,
+                        "error": str(exc),
+                        "duration_ms": round((time.perf_counter() - started) * 1000),
+                    },
+                    ensure_ascii=False,
+                )
             )
             raise HTTPException(
                 status_code=502, detail="Telegram delivery failed"
             ) from None
 
         app.state.logger.info(
-            {
-                "event": "notification_sent",
-                **fields,
-                "duration_ms": round((time.perf_counter() - started) * 1000),
-                "result": "ok",
-            }
+            json.dumps(
+                {
+                    "event": "notification_sent",
+                    **fields,
+                    "duration_ms": round((time.perf_counter() - started) * 1000),
+                },
+                ensure_ascii=False,
+            )
         )
         return {"status": "sent"}
 

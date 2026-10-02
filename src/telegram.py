@@ -6,10 +6,7 @@ from src.config import Destination
 
 
 class DeliveryError(Exception):
-    def __init__(self, code: str, exception_type: str | None = None) -> None:
-        super().__init__(code)
-        self.code = code
-        self.exception_type = exception_type
+    pass
 
 
 async def send_message(
@@ -26,10 +23,10 @@ async def send_message(
                     "parse_mode": "HTML",
                 },
             )
-        except httpx.TimeoutException as exc:
-            error = DeliveryError("telegram_timeout", type(exc).__name__)
-        except httpx.TransportError as exc:
-            error = DeliveryError("telegram_transport", type(exc).__name__)
+        except httpx.TimeoutException:
+            error = DeliveryError("telegram_timeout")
+        except httpx.TransportError:
+            error = DeliveryError("telegram_transport")
         else:
             if 500 <= response.status_code <= 599:
                 error = DeliveryError("telegram_server")
