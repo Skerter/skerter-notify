@@ -1,0 +1,7 @@
+destinations:
+  website-a:
+    bot_token_env: TG_WEBSITE_A_BOT_TOKEN
+    chat_id_env: TG_WEBSITE_A_CHAT_ID
+  monitoring:
+    bot_token_env: TG_MONITORING_BOT_TOKEN
+    chat_id_env: TG_MONITORING_CHAT_ID
