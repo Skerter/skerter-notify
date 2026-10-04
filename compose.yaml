@@ -1,5 +1,6 @@
 services:
   notify:
+    container_name: skerter-notify
     build: .
     env_file: .env
     ports:
