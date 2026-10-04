@@ -1,0 +1,55 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: skerter-notify-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yaml
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require trusted SSH host fingerprint
+        env:
+          VPS_SSH_FINGERPRINT: ${{ secrets.VPS_SSH_FINGERPRINT }}
+        run: ': "${VPS_SSH_FINGERPRINT:?Set VPS_SSH_FINGERPRINT from a trusted server console}"'
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH || '/opt/skerter-notify' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ vars.VPS_SSH_PORT || '22' }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          fingerprint: ${{ secrets.VPS_SSH_FINGERPRINT }}
+          envs: DEPLOY_SHA,DEPLOY_PATH
+          command_timeout: 20m
+          script: |
+            set -eu
+            cd "$DEPLOY_PATH"
+            test "$(git branch --show-current)" = main
+            git diff HEAD --quiet
+            git fetch origin main
+            if [ "$(git rev-parse origin/main)" != "$DEPLOY_SHA" ]; then
+              echo 'Skipping deployment: this commit is no longer the head of main.'
+              exit 0
+            fi
+            git merge --ff-only "$DEPLOY_SHA"
+            test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+            docker compose up -d --build --wait --wait-timeout 120

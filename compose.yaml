@@ -1,3 +1,5 @@
+name: skerter-notify
+
 services:
   notify:
     container_name: skerter-notify
@@ -6,3 +8,13 @@ services:
     ports:
       - "127.0.0.1:18080:8000"
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - 'import json, urllib.request; assert json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)) == {"status": "ok"}'
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s

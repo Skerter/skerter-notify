@@ -39,3 +39,45 @@ docker compose config
 ```
 
 Сервис намеренно пишет полные `title` и `text` в JSON-логи. Вызывающие сервисы должны очищать содержимое перед отправкой.
+
+## CI и автодеплой
+
+- `CI` (`.github/workflows/ci.yaml`): push в `dev`, pull request в `main`/`dev` и вызов из CD. Проверяет Ruff, mypy, pytest и конфигурацию Compose на Python 3.12.
+- `CD` (`.github/workflows/cd.yaml`): push в `main` или ручной запуск для `main`. Сначала вызывает CI, затем по SSH обновляет код на VDS и запускает `docker compose up -d --build --wait --wait-timeout 120`.
+
+Единственная production-конфигурация — `compose.yaml` в корне. Образ собирается на VDS, запуск проверяется через `/health`. На push в `main` проверки выполняются один раз, внутри CD.
+
+В GitHub → Settings → Secrets and variables → Actions задайте repository secrets:
+
+| Secret | Значение |
+| --- | --- |
+| `VPS_HOST` | Адрес сервера |
+| `VPS_USER` | SSH-пользователь с доступом к Docker и каталогу проекта |
+| `VPS_SSH_KEY` | Приватный SSH-ключ; публичный ключ добавьте в `authorized_keys` на VPS |
+| `VPS_SSH_FINGERPRINT` | SHA256 fingerprint SSH host key из доверенной консоли сервера |
+
+Fingerprint можно получить в консоли VDS: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256`. В secret сохраните только значение `SHA256:…`.
+
+Необязательные repository variables: `VPS_DEPLOY_PATH` (по умолчанию `/opt/skerter-notify`) и `VPS_SSH_PORT` (по умолчанию `22`).
+
+Перед первым деплоем установите на VDS Git, Docker и Compose v2 с поддержкой `up --wait`. От имени SSH-пользователя подготовьте checkout и `.env`:
+
+```bash
+git clone --branch main https://github.com/Skerter/skerter-notify.git /opt/skerter-notify
+cd /opt/skerter-notify
+cp .env.example .env
+chmod 600 .env
+# Заполните .env реальными API_KEY, Telegram bot tokens и chat IDs.
+```
+
+Для приватного репозитория отдельно настройте доступ VDS к `git fetch origin main`. Изменения `config/destinations.yaml` нужно коммитить в репозиторий. Секреты хранятся в `.env` на сервере.
+
+CD пропускает устаревший коммит и обновляет checkout только через fast-forward до проверенного CI коммита. Локальные изменения отслеживаемых файлов останавливают деплой. Порт остаётся `127.0.0.1:18080`. Ошибка сборки или проверки здоровья завершает workflow с ошибкой; автоматического отката нет.
+
+Ручное управление выполняйте из корня checkout:
+
+```bash
+docker compose ps
+docker compose logs --tail 100 notify
+docker compose up -d --build --wait
+```
