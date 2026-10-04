@@ -41,7 +41,7 @@ jobs:
           envs: DEPLOY_SHA,DEPLOY_PATH
           command_timeout: 20m
           script: |
-            set -eu
+            set -eux
             cd "$DEPLOY_PATH"
             test "$(git branch --show-current)" = main
             git diff HEAD --quiet
